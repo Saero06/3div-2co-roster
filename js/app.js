@@ -94,10 +94,7 @@ const S = {
 const isAdmin = () => S.profile?.role === "admin";
 
 /* ---------- 테마 (네이비 / 화이트) ---------- */
-function loadTheme() {
-  try { return localStorage.getItem("roster-theme") || "navy"; } catch { return "navy"; }
-}
-let THEME = loadTheme();
+let THEME = "navy"; // 기본 네이비 테마
 document.documentElement.setAttribute("data-theme", THEME);
 function themeButton(extraClass = "") {
   const next = THEME === "navy" ? "white" : "navy";
@@ -111,7 +108,6 @@ function bindThemeButton() {
   b.onclick = () => {
     THEME = THEME === "navy" ? "white" : "navy";
     document.documentElement.setAttribute("data-theme", THEME);
-    try { localStorage.setItem("roster-theme", THEME); } catch {}
     route();
   };
 }
