@@ -93,6 +93,30 @@ const S = {
 
 const isAdmin = () => S.profile?.role === "admin";
 
+/* ---------- 테마 (네이비 / 화이트) ---------- */
+function loadTheme() {
+  try { return localStorage.getItem("roster-theme") || "navy"; } catch { return "navy"; }
+}
+let THEME = loadTheme();
+document.documentElement.setAttribute("data-theme", THEME);
+function themeButton(extraClass = "") {
+  const next = THEME === "navy" ? "white" : "navy";
+  return `<button class="btn-theme ${extraClass}" id="btn-theme" data-testid="button-theme" aria-label="${next === "white" ? "화이트" : "네이비"} 테마로 변경">
+    <span class="sw" style="background:${next === "white" ? "#ffffff" : "#101b32"}"></span>${next === "white" ? "화이트" : "네이비"}
+  </button>`;
+}
+function bindThemeButton() {
+  const b = document.getElementById("btn-theme");
+  if (!b) return;
+  b.onclick = () => {
+    THEME = THEME === "navy" ? "white" : "navy";
+    document.documentElement.setAttribute("data-theme", THEME);
+    try { localStorage.setItem("roster-theme", THEME); } catch {}
+    route();
+  };
+}
+const LOGO = `<img class="unit-logo" src="img/logo.png" alt="제3보병사단 로고" width="160" height="160" />`;
+
 /* ============================================================
    데이터 어댑터 — Supabase / 데모
    ============================================================ */
@@ -263,8 +287,9 @@ function renderAuth() {
   function draw() {
     app.innerHTML = `
       <div class="auth-wrap">
+        ${themeButton("auth-theme")}
         <div class="auth-card" data-testid="auth-card">
-          <div class="unit-badge">2</div>
+          ${LOGO}
           <h1>제3사단 제2중대<br />인원 현황</h1>
           <p class="desc">승인된 인원만 접근할 수 있는 내부 명단입니다.</p>
           ${
@@ -302,6 +327,7 @@ function renderAuth() {
         </div>
       </div>`;
 
+    bindThemeButton();
     if (S.demo) {
       $("#demo-admin-btn").onclick = async () => {
         S.profile = { ...DEMO_DATA.profiles[0] };
@@ -346,7 +372,7 @@ function renderAuth() {
 function renderWaiting() {
   $("#app").innerHTML = `
     <div class="auth-wrap"><div class="wait-wrap">
-      <div class="icon">⏳</div>
+      <div style="display:flex;justify-content:center;margin-bottom:16px;">${LOGO.replace('unit-logo', 'unit-logo" style="width:88px;height:88px')}</div>
       <h1>승인 대기 중</h1>
       <p>가입이 확인되었습니다. 관리자가 승인하면 명단에 접근할 수 있습니다.<br />중대 인사 담당자에게 문의해 주세요.</p>
       <div style="margin-top:24px;"><button class="btn ghost" id="wait-logout">로그아웃</button></div>
@@ -357,7 +383,7 @@ function renderWaiting() {
 function renderBlocked() {
   $("#app").innerHTML = `
     <div class="auth-wrap"><div class="wait-wrap">
-      <div class="icon">🚫</div>
+      <div style="display:flex;justify-content:center;margin-bottom:16px;">${LOGO.replace('unit-logo', 'unit-logo" style="width:88px;height:88px')}</div>
       <h1>접근이 제한되었습니다</h1>
       <p>해당 계정은 접근 권한이 없습니다. 관리자에게 문의해 주세요.</p>
       <div style="margin-top:24px;"><button class="btn ghost" id="wait-logout">로그아웃</button></div>
@@ -377,21 +403,23 @@ function renderTopbar(active) {
   return `
     <header class="topbar">
       <div class="unit-mark">
-        <div class="unit-badge">2</div>
+        ${LOGO}
         <div>
           제3사단 제2중대
-          <span class="sub">ROSTER · 인원 현황</span>
+          <span class="sub">3RD INFANTRY DIVISION</span>
         </div>
       </div>
       <nav>
         ${nav.map((n) => `<a class="nav-link ${active === n.href ? "active" : ""}" href="${n.href}" data-testid="${n.testid}">${n.label}</a>`).join("")}
-        <div class="user-chip"><span class="name">${esc(S.profile.display_name || S.profile.email)}</span>·${isAdmin() ? "관리자" : "인원"}</div>
+        <div class="user-chip"><span class="name">${esc(S.profile.display_name || S.profile.email)}</span><span class="role">· ${isAdmin() ? "관리자" : "인원"}</span></div>
+        ${themeButton()}
         <button class="btn-logout" id="btn-logout" data-testid="button-logout">로그아웃</button>
       </nav>
     </header>`;
 }
 
 function bindTopbar() {
+  bindThemeButton();
   $("#btn-logout").onclick = async () => { await DB.signOut(); route(); };
 }
 
