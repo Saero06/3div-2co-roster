@@ -64,18 +64,20 @@ git push origin main
 > 코드가 공개되어도 명단은 보호됩니다. 코드 자체를 감추고 싶다면 GitHub Pro에서
 > 비공개 저장소의 Pages를 사용하면 됩니다.
 
-## 6. 첫 관리자 지정 (중요)
+## 6. 관리자 지정
 
-1. 사이트에서 **신규 가입 신청**으로 본인 계정을 만듭니다. (자동으로 '승인 대기' 상태)
-2. Supabase → **SQL Editor** 에서 아래 실행 (이메일은 본인 것으로):
+관리자 이메일을 `private.admin_emails` 에 등록해 두면, 그 이메일로 가입하고 **메일 인증을 마치는 순간** 자동으로 관리자가 됩니다.
+인증 전에는 '승인 대기' 상태라서, 다른 사람이 같은 이메일로 먼저 가입해도 관리자 권한을 얻을 수 없습니다.
 
 ```sql
-update public.profiles set role = 'admin' where email = 'your@email.com';
+insert into private.admin_emails values ('관리자@이메일.com');
 ```
 
-3. 사이트를 새로고침하면 관리자 화면이 열립니다.
+이미 가입·인증한 계정을 관리자로 바꾸려면:
 
-이후 가입자는 모두 '승인 대기' 상태가 되고, 관리 페이지에서 승인/거절합니다.
+```sql
+update public.profiles set role = 'admin' where email = '관리자@이메일.com';
+```
 
 ## 운영 규칙
 

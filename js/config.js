@@ -10,7 +10,7 @@
    anon 키가 노출되어도 RLS(행 단위 보안)가 데이터를 지켜줍니다.
    ============================================================ */
 
-const SUPABASE_URL = ""; // 예: "https://abcdefgh.supabase.co"
-const SUPABASE_ANON_KEY = ""; // 예: "eyJhbGciOi..."
+const SUPABASE_URL = "https://jistisjacfdqpjxfougv.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imppc3Rpc2phY2ZkcXBqeGZvdWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxMzE1MTgsImV4cCI6MjEwNzcwNzUxOH0.WoBaRaIxrf6XwFXBJxf51gzKmgFzi5qbbWaVvUZge8I";
 
 // 설정이 비어 있으면 사이트가 자동으로 "데모 모드"(샘플 데이터)로 동작합니다.

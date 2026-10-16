@@ -60,7 +60,15 @@ function kstHour(d) {
   return String(h).padStart(2, "0") + "시";
 }
 
+const AUTH_MSG = {
+  "Invalid login credentials": "이메일 또는 비밀번호가 올바르지 않습니다.",
+  "Email not confirmed": "이메일 인증이 아직 안 됐습니다. 메일함의 인증 링크를 눌러 주세요.",
+  "User already registered": "이미 가입된 이메일입니다. 로그인해 주세요.",
+  "Password should be at least 6 characters.": "비밀번호는 6자 이상이어야 합니다.",
+  "Email rate limit exceeded": "인증 메일 발송 한도를 넘었습니다. 잠시 후 다시 시도해 주세요.",
+};
 function toast(msg, type = "") {
+  msg = AUTH_MSG[msg] || (/rate limit/i.test(msg) ? AUTH_MSG["Email rate limit exceeded"] : msg);
   const root = $("#toast-root");
   const t = document.createElement("div");
   t.className = "toast " + type;
@@ -140,7 +148,7 @@ const SupaDB = {
   async signUp(email, password, displayName) {
     const { data, error } = await S.sb.auth.signUp({
       email, password,
-      options: { data: { display_name: displayName } },
+      options: { data: { display_name: displayName }, emailRedirectTo: location.origin + location.pathname },
     });
     if (error) throw new Error(error.message);
     if (data.session) {

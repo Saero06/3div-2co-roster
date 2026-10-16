@@ -67,8 +67,12 @@ create index if not exists idx_warnings_member on public.warnings (member_id);
 create index if not exists idx_points_member  on public.point_events (member_id, event_at desc);
 
 -- ---------- 헬퍼 함수 ----------
+-- 외부 API로 직접 호출되지 않도록 private 스키마에 둡니다.
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
 -- RLS 정책 안에서 무한 재귀를 피하기 위해 security definer 로 작성
-create or replace function public.is_admin()
+create or replace function private.is_admin()
 returns boolean
 language sql stable security definer
 set search_path = public
@@ -79,7 +83,7 @@ as $$
   );
 $$;
 
-create or replace function public.is_viewer()
+create or replace function private.is_viewer()
 returns boolean
 language sql stable security definer
 set search_path = public
@@ -91,7 +95,7 @@ as $$
 $$;
 
 -- ---------- 회원가입 시 프로필 자동 생성 ----------
-create or replace function public.handle_new_user()
+create or replace function private.handle_new_user()
 returns trigger
 language plpgsql security definer
 set search_path = public
@@ -107,10 +111,16 @@ begin
 end;
 $$;
 
+revoke execute on function private.is_admin() from public, anon;
+revoke execute on function private.is_viewer() from public, anon;
+grant execute on function private.is_admin() to authenticated;
+grant execute on function private.is_viewer() to authenticated;
+revoke execute on function private.handle_new_user() from public, anon, authenticated;
+
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+  for each row execute procedure private.handle_new_user();
 
 -- ---------- RLS (행 단위 보안) ----------
 -- anon 키가 노출되어도, 아래 정책이 없으면 데이터에 접근할 수 없습니다.
@@ -123,66 +133,83 @@ alter table public.point_events     enable row level security;
 
 -- profiles: 본인 자신은 항상 자기 행 읽기 가능 (역할 확인용)
 create policy "profiles self read"
-  on public.profiles for select
+  on public.profiles for select to authenticated
   using (auth.uid() = id);
 
 create policy "profiles admin read"
-  on public.profiles for select
-  using (public.is_admin());
+  on public.profiles for select to authenticated
+  using (private.is_admin());
 
 -- 관리자만 계정 권한 변경 (승인/거절/관리자 승격)
 create policy "profiles admin update"
-  on public.profiles for update
-  using (public.is_admin())
-  with check (public.is_admin());
+  on public.profiles for update to authenticated
+  using (private.is_admin())
+  with check (private.is_admin());
 
 -- members: 승인된 인원(member/admin)만 조회, 관리자만 수정
 create policy "members viewer read"
-  on public.members for select
-  using (public.is_viewer());
+  on public.members for select to authenticated
+  using (private.is_viewer());
 
 create policy "members admin insert"
-  on public.members for insert
-  with check (public.is_admin());
+  on public.members for insert to authenticated
+  with check (private.is_admin());
 
 create policy "members admin update"
-  on public.members for update
-  using (public.is_admin())
-  with check (public.is_admin());
+  on public.members for update to authenticated
+  using (private.is_admin())
+  with check (private.is_admin());
 
 create policy "members admin delete"
-  on public.members for delete
-  using (public.is_admin());
+  on public.members for delete to authenticated
+  using (private.is_admin());
 
 -- personnel_changes / warnings / point_events: 조회는 승인 인원, 쓰기는 관리자
 create policy "changes viewer read"
-  on public.personnel_changes for select
-  using (public.is_viewer());
+  on public.personnel_changes for select to authenticated
+  using (private.is_viewer());
 create policy "changes admin insert"
-  on public.personnel_changes for insert
-  with check (public.is_admin());
+  on public.personnel_changes for insert to authenticated
+  with check (private.is_admin());
 
 create policy "warnings viewer read"
-  on public.warnings for select
-  using (public.is_viewer());
+  on public.warnings for select to authenticated
+  using (private.is_viewer());
 create policy "warnings admin insert"
-  on public.warnings for insert
-  with check (public.is_admin());
+  on public.warnings for insert to authenticated
+  with check (private.is_admin());
 create policy "warnings admin update"
-  on public.warnings for update
-  using (public.is_admin())
-  with check (public.is_admin());
+  on public.warnings for update to authenticated
+  using (private.is_admin())
+  with check (private.is_admin());
 
 create policy "points viewer read"
-  on public.point_events for select
-  using (public.is_viewer());
+  on public.point_events for select to authenticated
+  using (private.is_viewer());
 create policy "points admin insert"
-  on public.point_events for insert
-  with check (public.is_admin());
+  on public.point_events for insert to authenticated
+  with check (private.is_admin());
 
--- ============================================================
--- [첫 관리자 지정] 사이트에서 회원가입한 뒤, 아래를 실행하세요.
--- 이메일을 본인 것으로 바꾼 뒤 SQL Editor 에서 실행:
---
--- update public.profiles set role = 'admin' where email = 'your@email.com';
--- ============================================================
+-- ---------- 관리자 이메일 등록 (이메일 인증 후 자동 승격) ----------
+create table if not exists private.admin_emails (email text primary key);
+revoke all on private.admin_emails from public, anon, authenticated;
+
+create or replace function private.promote_confirmed_admin()
+returns trigger language plpgsql security definer set search_path = public, private as $$
+begin
+  if new.email_confirmed_at is not null
+     and exists (select 1 from private.admin_emails a where lower(a.email) = lower(new.email)) then
+    update public.profiles set role = 'admin' where id = new.id and role <> 'admin';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function private.promote_confirmed_admin() from public, anon, authenticated;
+
+drop trigger if exists on_auth_user_verified on auth.users;
+create trigger on_auth_user_verified
+  after insert or update of email_confirmed_at on auth.users
+  for each row execute procedure private.promote_confirmed_admin();
+
+-- 관리자 추가: insert into private.admin_emails values ('이메일@주소');
+-- 이미 가입·인증된 계정이라면: update public.profiles set role = 'admin' where email = '이메일@주소';
