@@ -243,7 +243,7 @@ const DemoDB = {
     if (w) w.active = false;
   },
   async addPoint(e) { S.points.push({ id: "dp" + Date.now(), ...e }); },
-  async addChange(c) { S.changes.push({ id: "dc" + Date.now(), ...c }); },
+  async addChange(c) { S.changes.push({ id: "dc" + Date.now() + Math.random(), changed_at: new Date().toISOString(), ...c }); },
   async setUserRole(id, role) {
     const p = S.profiles.find((x) => x.id === id);
     if (p) p.role = role;
@@ -318,9 +318,9 @@ function renderAuth() {
           <p class="desc">승인된 인원만 접근할 수 있는 내부 명단입니다.</p>
           ${
             S.demo
-              ? `<div class="auth-note">데모 모드입니다 — 실제 Supabase 연결 전 샘플 데이터로 화면을 보여드립니다.</div>
+              ? `<div class="auth-note">아직 데이터베이스가 연결되지 않은 임시 모드입니다. 인원을 입력해 볼 수 있지만, 새로고침하면 사라집니다.</div>
                  <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
-                   <button class="btn full" id="demo-admin-btn" data-testid="button-demo-admin">관리자로 데모 둘러보기</button>
+                   <button class="btn full" id="demo-admin-btn" data-testid="button-demo-admin">관리자(새로)로 들어가기</button>
                    <button class="btn ghost full" id="demo-member-btn" data-testid="button-demo-member">일반 인원으로 보기</button>
                  </div>`
               : `
@@ -493,7 +493,7 @@ function renderRoster() {
 
   $("#app").innerHTML = `
     ${renderTopbar("#/roster")}
-    ${S.demo ? `<div class="demo-banner">데모 모드 — 샘플 데이터가 표시되고 있습니다.</div>` : ""}
+    ${S.demo ? `<div class="demo-banner">임시 모드 — 입력한 내용은 새로고침하면 사라집니다. 데이터베이스(Supabase)를 연결하면 저장됩니다.</div>` : ""}
     <main class="page">
       <div class="page-head">
         <div>
@@ -514,7 +514,7 @@ function renderRoster() {
       </div>
 
       <div class="stat-row">
-        <div class="stat"><div class="label">재직 인원</div><div class="value">${activeCount}</div></div>
+        <div class="stat"><div class="label">재직 인원</div><div class="value">${activeCount}명</div></div>
         <div class="stat"><div class="label">휴가 중</div><div class="value" data-testid="stat-leave">${leaveCount}명</div></div>
         <div class="stat"><div class="label">이번 주 실적 합계</div><div class="value ${weekTotal >= 0 ? "pos" : "neg"}">${weekTotal >= 0 ? "+" : ""}${weekTotal}p</div></div>
         <div class="stat"><div class="label">경고 대상</div><div class="value ${warnedCount ? "neg" : ""}">${warnedCount}명</div></div>
@@ -536,7 +536,7 @@ function renderRoster() {
             </tr></thead>
             <tbody>
               ${rows.length ? rows.map((m) => rosterRow(m, ws)).join("") : `
-                <tr><td colspan="8"><div class="empty-state"><div class="big">인원이 없습니다</div>조건을 바꾸거나 인원을 추가해 보세요.</div></td></tr>`}
+                <tr><td colspan="8"><div class="empty-state"><div class="big">인원이 없습니다</div>${isAdmin() ? "오른쪽 위 '인원 추가' 버튼으로 첫 인원을 등록하세요." : "조건을 바꿔 보세요."}</div></td></tr>`}
             </tbody>
           </table>
         </div>
@@ -1000,6 +1000,7 @@ function openMemberForm(m) {
       } else {
         const row = await DB.addMember({ ...data, status: "active" });
         await DB.addChange({ member_id: row.id, change_type: "전입", detail: "신규 편입", changed_by: S.profile.id });
+        closeModal();
         await refresh();
         toast("인원이 추가되었습니다.", "ok");
       }
@@ -1017,7 +1018,7 @@ function renderAdmin() {
 
   $("#app").innerHTML = `
     ${renderTopbar("#/admin")}
-    ${S.demo ? `<div class="demo-banner">데모 모드 — 샘플 데이터가 표시되고 있습니다.</div>` : ""}
+    ${S.demo ? `<div class="demo-banner">임시 모드 — 입력한 내용은 새로고침하면 사라집니다. 데이터베이스(Supabase)를 연결하면 저장됩니다.</div>` : ""}
     <main class="page">
       <div class="page-head">
         <div>
