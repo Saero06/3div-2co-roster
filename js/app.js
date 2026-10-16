@@ -8,8 +8,13 @@
 /* ---------- 유틸 ---------- */
 
 const $ = (sel, root = document) => root.querySelector(sel);
-const esc = (s) =>
-  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&", "<": "<", ">": ">", '"': """, "'": "&#39;" }[c]));
+const ESC_MAP = {};
+ESC_MAP[String.fromCharCode(38)] = String.fromCharCode(38) + "amp;";
+ESC_MAP[String.fromCharCode(60)] = String.fromCharCode(38) + "lt;";
+ESC_MAP[String.fromCharCode(62)] = String.fromCharCode(38) + "gt;";
+ESC_MAP[String.fromCharCode(34)] = String.fromCharCode(38) + "quot;";
+ESC_MAP[String.fromCharCode(39)] = String.fromCharCode(38) + "#39;";
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC_MAP[c]);
 
 const DAY = 86400000;
 const KST_OFFSET = 9 * 3600000;
@@ -163,17 +168,21 @@ const SupaDB = {
   },
 };
 
+let demoLoaded = false;
+
 const DemoDB = {
   async init() { /* 데모 모드: 로그인 없음 */ },
   async signIn() { throw new Error("데모 모드에서는 이메일 로그인이 제공되지 않습니다."); },
   async signUp() { throw new Error("데모 모드에서는 가입이 제공되지 않습니다."); },
   async signOut() { S.profile = null; },
   async fetchAll() {
+    if (demoLoaded) return; // 세션 동안 데모 수정 사항 유지
     S.members = DEMO_DATA.members.map((m) => ({ ...m }));
     S.warnings = DEMO_DATA.warnings.map((w) => ({ ...w }));
     S.points = DEMO_DATA.point_events.map((p) => ({ ...p }));
     S.changes = DEMO_DATA.personnel_changes.map((c) => ({ ...c }));
     S.profiles = DEMO_DATA.profiles.map((p) => ({ ...p }));
+    demoLoaded = true;
   },
   async addMember(m) {
     const row = { id: "dm" + Date.now(), status: "active", ...m };
@@ -220,7 +229,7 @@ function lastChange(memberId) {
    ============================================================ */
 
 function route() {
-  const hash = location.hash.replace(/^#/, "");
+  const hash = location.hash.replace(/^#\/?/, "");
   if (!S.profile) { renderAuth(); return; }
   if (S.profile.role === "pending") { renderWaiting(); return; }
   if (S.profile.role === "blocked") { renderBlocked(); return; }
@@ -541,7 +550,7 @@ function drawMemberModal(id) {
   const weekList = [];
   for (let i = 0; i < 5; i++) {
     const ws = weekStartUTC(Date.now()) - i * 7 * DAY;
-    weekList.push({ ws, label: i === 0 ? "이번 주" : fmtDate(ws).slice(5) });
+    weekList.push({ ws, label: i === 0 ? "이번 주" : kstDateStr(ws).slice(5).replace("-", "/") });
   }
   const selWeek = weekList[modalWeekOffset];
   const weekEvents = S.points

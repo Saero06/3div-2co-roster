@@ -26,7 +26,7 @@
   --border: #2e3629;
   --text: #e8e9e4;
   --text-muted: #9aa094;
-  --text-faint: #5f665a;
+  --text-faint: #7a8171;
 
   --primary: #a3b18a;
   --primary-hover: #c3d0a5;
@@ -390,7 +390,7 @@ td.mono, .mono { font-family: var(--font-mono); font-size: 0.9em; color: var(--t
 }
 .btn-close:hover { background: var(--surface-2); color: var(--text); }
 
-.modal-body { padding: var(--space-6); }
+.modal-body { padding: var(--space-6) var(--space-6) var(--space-10); }
 
 .sect { margin-bottom: var(--space-6); }
 .sect:last-child { margin-bottom: 0; }
@@ -433,7 +433,7 @@ td.mono, .mono { font-family: var(--font-mono); font-size: 0.9em; color: var(--t
 .timeline-item .delta.pos { color: var(--success); }
 .timeline-item .delta.neg { color: var(--danger); }
 
-.week-picker { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.week-picker { display: flex; gap: var(--space-2); flex-wrap: nowrap; overflow-x: auto; margin-bottom: var(--space-3); padding-bottom: var(--space-1); }
 .week-pill {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
