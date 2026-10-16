@@ -9,7 +9,7 @@ const DEMO_DATA = {
   members: [
     { id: "m1", roblox_nick: "IronEagle_KR", duty: "부중대장", rank: "대위", join_date: "2024-11-03", status: "active" },
     { id: "m2", roblox_nick: "수류탄던진사람", duty: "1분대장", rank: "중사", join_date: "2025-02-14", status: "active" },
-    { id: "m3", roblox_nick: "NightOwl_77", duty: "2분대장", rank: "하사", join_date: "2025-05-21", status: "active" },
+    { id: "m3", roblox_nick: "NightOwl_77", duty: "2분대장", rank: "하사", join_date: "2025-05-21", status: "leave", leave_start: "2026-10-14", leave_end: "2026-10-20", leave_reason: "중간고사 기간" },
     { id: "m4", roblox_nick: "김치찌개킬러", duty: "통신병", rank: "병장", join_date: "2025-07-02", status: "active" },
     { id: "m5", roblox_nick: "GhostRecon_9", duty: "저격수", rank: "상병", join_date: "2026-01-19", status: "active" },
     { id: "m6", roblox_nick: "탄약고지킴", duty: "탄약병", rank: "일병", join_date: "2026-03-08", status: "active" },
@@ -24,6 +24,7 @@ const DEMO_DATA = {
     { id: "c3", member_id: "m2", change_type: "전입", detail: "신규 입대", changed_at: "2025-02-14T10:00:00+09:00", changed_by: "demo-admin" },
     { id: "c4", member_id: "m5", change_type: "직책 변경", detail: "일병 → 저격수", changed_at: "2026-07-15T09:00:00+09:00", changed_by: "demo-admin" },
     { id: "c5", member_id: "m4", change_type: "직위 변경", detail: "상병 → 병장", changed_at: "2026-08-01T09:00:00+09:00", changed_by: "demo-admin" },
+    { id: "c7", member_id: "m3", change_type: "휴가", detail: "2026-10-14 ~ 2026-10-20 · 중간고사 기간", changed_at: "2026-10-14T09:00:00+09:00", changed_by: "demo-admin" },
     { id: "c6", member_id: "m10", change_type: "전출", detail: "제7사단으로 전출", changed_at: "2026-05-20T09:00:00+09:00", changed_by: "demo-admin" },
   ],
   warnings: [

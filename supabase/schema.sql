@@ -23,7 +23,10 @@ create table if not exists public.members (
   rank         text not null default '',        -- 직위
   join_date    date not null,                   -- 전입일자 (근속일수는 이 값으로 자동 계산)
   status       text not null default 'active'
-               check (status in ('active', 'transferred', 'discharged')),
+               check (status in ('active', 'leave', 'transferred', 'discharged')),
+  leave_start  date,                            -- 휴가 시작일
+  leave_end    date,                            -- 휴가 복귀 예정일
+  leave_reason text not null default '',
   created_at   timestamptz not null default now()
 );
 

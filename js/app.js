@@ -177,6 +177,11 @@ const SupaDB = {
     if (error) throw new Error(error.message);
     if (!data) throw new Error("수정 실패: 대상을 찾을 수 없습니다.");
   },
+  async deleteMember(id) {
+    const { data, error } = await S.sb.from("members").delete().eq("id", id).select("id");
+    if (error) throw new Error(error.message);
+    if (!data || !data.length) throw new Error("삭제 실패: 권한이 없거나 대상을 찾을 수 없습니다.");
+  },
   async addWarning(w) {
     const { error } = await S.sb.from("warnings").insert(w);
     if (error) throw new Error(error.message);
@@ -226,6 +231,12 @@ const DemoDB = {
     const row = S.members.find((m) => m.id === id);
     if (row) Object.assign(row, patch);
   },
+  async deleteMember(id) {
+    S.members = S.members.filter((m) => m.id !== id);
+    S.points = S.points.filter((p) => p.member_id !== id);
+    S.warnings = S.warnings.filter((w) => w.member_id !== id);
+    S.changes = S.changes.filter((c) => c.member_id !== id);
+  },
   async addWarning(w) { S.warnings.push({ id: "dw" + Date.now(), active: true, ...w }); },
   async resolveWarning(id) {
     const w = S.warnings.find((x) => x.id === id);
@@ -240,6 +251,23 @@ const DemoDB = {
 };
 
 const DB = S.demo ? DemoDB : SupaDB;
+
+/* ---------- 인원 상태 ---------- */
+const STATUS_LABEL = { active: "재직", leave: "휴가", transferred: "전출", discharged: "퇴역" };
+const inUnit = (m) => m.status === "active" || m.status === "leave"; // 중대 소속(휴가 포함)
+function leaveExpired(m) {
+  return m.status === "leave" && m.leave_end && m.leave_end < kstDateStr(Date.now());
+}
+function statusChip(m) {
+  if (m.status === "active") return "";
+  if (m.status === "leave") {
+    const until = m.leave_end ? m.leave_end.slice(5).replace("-", "/") : "";
+    return leaveExpired(m)
+      ? ` <span class="chip warn-1" title="휴가 기간이 지났습니다">휴가 만료 ${until}</span>`
+      : ` <span class="chip leave">휴가 ~${until}</span>`;
+  }
+  return ` <span class="chip none">${STATUS_LABEL[m.status] || m.status}</span>`;
+}
 
 /* ---------- 파생 데이터 ---------- */
 
@@ -445,7 +473,7 @@ function renderRoster() {
   const isAdminUser = isAdmin();
 
   const rows = S.members
-    .filter((m) => (S.filter.status === "all" ? true : m.status === S.filter.status))
+    .filter((m) => (S.filter.status === "all" ? true : S.filter.status === "active" ? inUnit(m) : m.status === S.filter.status))
     .filter((m) => !S.filter.q || m.roblox_nick.toLowerCase().includes(S.filter.q.toLowerCase()))
     .sort((a, b) => {
       const f = SORTABLE[S.sort.key];
@@ -454,12 +482,13 @@ function renderRoster() {
       return cmp * S.sort.dir;
     });
 
-  const activeCount = S.members.filter((m) => m.status === "active").length;
-  const weekTotal = S.members.filter((m) => m.status === "active").reduce((s, m) => s + weekPoints(m.id, ws), 0);
-  const warnedCount = S.members.filter((m) => m.status === "active" && activeWarning(m.id) > 0).length;
+  const activeCount = S.members.filter(inUnit).length;
+  const leaveCount = S.members.filter((m) => m.status === "leave").length;
+  const weekTotal = S.members.filter(inUnit).reduce((s, m) => s + weekPoints(m.id, ws), 0);
+  const warnedCount = S.members.filter((m) => inUnit(m) && activeWarning(m.id) > 0).length;
   const newCount = S.members.filter((m) => {
     const d = serviceDays(m.join_date);
-    return m.status === "active" && d !== null && d <= 30;
+    return inUnit(m) && d !== null && d <= 30;
   }).length;
 
   $("#app").innerHTML = `
@@ -474,8 +503,10 @@ function renderRoster() {
         <div class="actions">
           <input id="search" type="search" placeholder="닉네임 검색" value="${esc(S.filter.q)}" style="padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);" data-testid="input-search" />
           <select id="status-filter" style="padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);" data-testid="select-status">
-            <option value="active" ${S.filter.status === "active" ? "selected" : ""}>재직</option>
+            <option value="active" ${S.filter.status === "active" ? "selected" : ""}>재직 (휴가 포함)</option>
+            <option value="leave" ${S.filter.status === "leave" ? "selected" : ""}>휴가</option>
             <option value="transferred" ${S.filter.status === "transferred" ? "selected" : ""}>전출</option>
+            <option value="discharged" ${S.filter.status === "discharged" ? "selected" : ""}>퇴역</option>
             <option value="all" ${S.filter.status === "all" ? "selected" : ""}>전체</option>
           </select>
           ${isAdminUser ? `<button class="btn" id="btn-add-member" data-testid="button-add-member">인원 추가</button>` : ""}
@@ -484,6 +515,7 @@ function renderRoster() {
 
       <div class="stat-row">
         <div class="stat"><div class="label">재직 인원</div><div class="value">${activeCount}</div></div>
+        <div class="stat"><div class="label">휴가 중</div><div class="value" data-testid="stat-leave">${leaveCount}명</div></div>
         <div class="stat"><div class="label">이번 주 실적 합계</div><div class="value ${weekTotal >= 0 ? "pos" : "neg"}">${weekTotal >= 0 ? "+" : ""}${weekTotal}p</div></div>
         <div class="stat"><div class="label">경고 대상</div><div class="value ${warnedCount ? "neg" : ""}">${warnedCount}명</div></div>
         <div class="stat"><div class="label">신규 전입 (30일)</div><div class="value">${newCount}명</div></div>
@@ -547,7 +579,7 @@ function rosterRow(m, ws) {
     <tr data-member="${m.id}" data-testid="row-member-${esc(m.roblox_nick)}">
       <td>${m.duty ? `<span class="chip duty">${esc(m.duty)}</span>` : `<span class="chip none">—</span>`}</td>
       <td><span class="chip rank">${esc(m.rank || "미정")}</span></td>
-      <td><span class="member-name"><span class="avatar">${esc((m.roblox_nick || "?")[0])}</span>${esc(m.roblox_nick)}${m.status !== "active" ? ` <span class="chip none">${m.status === "transferred" ? "전출" : "퇴역"}</span>` : ""}</span></td>
+      <td><span class="member-name"><span class="avatar">${esc((m.roblox_nick || "?")[0])}</span>${esc(m.roblox_nick)}${statusChip(m)}</span></td>
       <td class="mono">${esc(fmtDate(m.join_date))}</td>
       <td class="mono">${sd ?? "—"}일</td>
       <td class="mono">${lc ? esc(fmtKstDate(lc.changed_at)) : "—"}</td>
@@ -606,7 +638,7 @@ function drawMemberModal(id) {
     <div class="modal" role="dialog" aria-label="${esc(m.roblox_nick)} 상세">
       <div class="modal-head">
         <div class="unit-badge">${esc((m.roblox_nick || "?")[0])}</div>
-        <h2>${esc(m.roblox_nick)}${m.status !== "active" ? ` <span class="chip none">${m.status === "transferred" ? "전출" : "퇴역"}</span>` : ""}</h2>
+        <h2>${esc(m.roblox_nick)}${statusChip(m)}</h2>
         <button class="btn-close" data-close aria-label="닫기">✕</button>
       </div>
       <div class="modal-body">
@@ -618,6 +650,8 @@ function drawMemberModal(id) {
             <div class="kv"><div class="k">전입일자</div><div class="v mono">${esc(fmtDate(m.join_date))}</div></div>
             <div class="kv"><div class="k">근속일수</div><div class="v mono">${sd ?? "—"}일</div></div>
             <div class="kv"><div class="k">인사변동일자</div><div class="v mono">${changes[0] ? esc(fmtKstDate(changes[0].changed_at)) : "—"}</div></div>
+            <div class="kv"><div class="k">상태</div><div class="v">${STATUS_LABEL[m.status] || m.status}</div></div>
+            ${m.status === "leave" ? `<div class="kv" style="grid-column:1/-1"><div class="k">휴가 기간 · 사유</div><div class="v"><span class="mono">${esc(m.leave_start || "—")} ~ ${esc(m.leave_end || "—")}</span> · ${esc(m.leave_reason || "사유 없음")}</div></div>` : ""}
             <div class="kv"><div class="k">경고</div><div class="v">${warn ? `<span class="chip warn-${warn}">경고 ${warn}</span>` : `<span class="chip none">없음</span>`}</div></div>
           </div>
         </div>
@@ -672,7 +706,17 @@ function drawMemberModal(id) {
             <button class="btn sm" id="btn-pts" data-testid="button-add-points">실적 포인트 입력</button>
             ${warn < 3 ? `<button class="btn sm ghost" id="btn-warn" data-testid="button-give-warning">경고 ${warn + 1} 부여</button>` : ""}
             <button class="btn sm ghost" id="btn-edit" data-testid="button-edit-member">인원 정보 수정</button>
-            ${m.status === "active" ? `<button class="btn sm ghost" id="btn-transfer" data-testid="button-transfer">전출 처리</button>` : ""}
+            ${m.status === "active" ? `<button class="btn sm ghost" id="btn-leave" data-testid="button-leave">휴가 처리</button>` : ""}
+            ${m.status === "leave" ? `<button class="btn sm" id="btn-return" data-testid="button-return">휴가 복귀</button>` : ""}
+            ${inUnit(m) ? `<button class="btn sm ghost" id="btn-transfer" data-testid="button-transfer">전출 처리</button>` : ""}
+            ${!inUnit(m) ? `<button class="btn sm ghost" id="btn-reinstate" data-testid="button-reinstate">복직 처리</button>` : ""}
+          </div>
+          <div class="danger-zone">
+            <div>
+              <strong>인원 삭제</strong>
+              <p>실적·경고·인사 이력까지 모두 지워지며 되돌릴 수 없습니다.</p>
+            </div>
+            <button class="btn sm danger" id="btn-delete" data-testid="button-delete-member">인원 삭제</button>
           </div>
         </div>` : ""}
       </div>
@@ -701,10 +745,111 @@ function drawMemberModal(id) {
   if (trBtn) trBtn.onclick = async () => {
     if (!confirm(`${m.roblox_nick} 님을 전출 처리하시겠습니까?`)) return;
     try {
-      await DB.updateMember(m.id, { status: "transferred" });
+      await DB.updateMember(m.id, { status: "transferred", leave_start: null, leave_end: null, leave_reason: "" });
       await DB.addChange({ member_id: m.id, change_type: "전출", detail: "전출 처리", changed_by: S.profile.id });
       await refresh(); drawMemberModal(id);
       toast("전출 처리되었습니다.", "ok");
+    } catch (err) { toast(err.message, "err"); }
+  };
+  const leaveBtn = $("#btn-leave");
+  if (leaveBtn) leaveBtn.onclick = () => openLeaveForm(m);
+  const retBtn = $("#btn-return");
+  if (retBtn) retBtn.onclick = async () => {
+    if (!confirm(`${m.roblox_nick} 님을 휴가 복귀 처리하시겠습니까?`)) return;
+    try {
+      await DB.updateMember(m.id, { status: "active", leave_start: null, leave_end: null, leave_reason: "" });
+      await DB.addChange({ member_id: m.id, change_type: "휴가 복귀", detail: `휴가(${m.leave_start || "?"} ~ ${m.leave_end || "?"}) 복귀`, changed_by: S.profile.id });
+      await refresh(); drawMemberModal(id);
+      toast("복귀 처리되었습니다.", "ok");
+    } catch (err) { toast(err.message, "err"); }
+  };
+  const reBtn = $("#btn-reinstate");
+  if (reBtn) reBtn.onclick = async () => {
+    if (!confirm(`${m.roblox_nick} 님을 복직 처리하시겠습니까?`)) return;
+    try {
+      await DB.updateMember(m.id, { status: "active" });
+      await DB.addChange({ member_id: m.id, change_type: "복직", detail: `${STATUS_LABEL[m.status]} → 재직`, changed_by: S.profile.id });
+      await refresh(); drawMemberModal(id);
+      toast("복직 처리되었습니다.", "ok");
+    } catch (err) { toast(err.message, "err"); }
+  };
+  const delBtn = $("#btn-delete");
+  if (delBtn) delBtn.onclick = () => openDeleteForm(m);
+}
+
+function openLeaveForm(m) {
+  const today = kstDateStr(Date.now());
+  openModal(`
+    <div class="modal" role="dialog" aria-label="휴가 처리">
+      <div class="modal-head"><h2>휴가 처리 — ${esc(m.roblox_nick)}</h2><button class="btn-close" data-close aria-label="닫기">✕</button></div>
+      <div class="modal-body">
+        <form id="leave-form">
+          <div class="form-grid">
+            <div class="field">
+              <label for="lv-start">시작일</label>
+              <input id="lv-start" type="date" required value="${today}" data-testid="input-leave-start" />
+            </div>
+            <div class="field">
+              <label for="lv-end">복귀 예정일</label>
+              <input id="lv-end" type="date" required value="${kstDateStr(Date.now() + 3 * DAY)}" data-testid="input-leave-end" />
+            </div>
+            <div class="field full">
+              <label for="lv-reason">사유</label>
+              <input id="lv-reason" type="text" maxlength="100" placeholder="예: 정기 휴가, 개인 사정, 시험 기간" data-testid="input-leave-reason" />
+              <p class="hint">휴가 중에도 '재직' 목록에 남고, 이름 옆에 복귀 예정일이 표시됩니다.</p>
+            </div>
+          </div>
+          <div class="inline-actions"><button class="btn" type="submit" data-testid="button-submit-leave">휴가 처리</button></div>
+        </form>
+      </div>
+    </div>`);
+  $("#leave-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const start = $("#lv-start").value, end = $("#lv-end").value;
+    const reason = $("#lv-reason").value.trim();
+    if (!start || !end) { toast("기간을 입력해 주세요.", "err"); return; }
+    if (end < start) { toast("복귀 예정일은 시작일 이후여야 합니다.", "err"); return; }
+    try {
+      await DB.updateMember(m.id, { status: "leave", leave_start: start, leave_end: end, leave_reason: reason });
+      await DB.addChange({ member_id: m.id, change_type: "휴가", detail: `${start} ~ ${end}${reason ? " · " + reason : ""}`, changed_by: S.profile.id });
+      await refresh(); drawMemberModal(m.id);
+      toast("휴가 처리되었습니다.", "ok");
+    } catch (err) { toast(err.message, "err"); }
+  };
+}
+
+function openDeleteForm(m) {
+  openModal(`
+    <div class="modal" role="dialog" aria-label="인원 삭제">
+      <div class="modal-head"><h2>인원 삭제 — ${esc(m.roblox_nick)}</h2><button class="btn-close" data-close aria-label="닫기">✕</button></div>
+      <div class="modal-body">
+        <p style="margin-bottom:16px;color:var(--text-muted);font-size:var(--text-sm);">
+          이 인원의 <strong style="color:var(--danger)">실적포인트, 경고, 인사 이력이 모두 함께 삭제</strong>되며 되돌릴 수 없습니다.
+          기록을 남기고 명단에서만 빼려면 '전출 처리'를 사용하세요.
+        </p>
+        <form id="del-form">
+          <div class="field">
+            <label for="del-confirm">확인을 위해 닉네임 <span class="mono" style="color:var(--text)">${esc(m.roblox_nick)}</span> 을(를) 입력하세요</label>
+            <input id="del-confirm" type="text" autocomplete="off" data-testid="input-delete-confirm" />
+          </div>
+          <div class="inline-actions">
+            <button class="btn danger" type="submit" id="del-submit" disabled data-testid="button-confirm-delete">영구 삭제</button>
+            <button class="btn ghost" type="button" data-close>취소</button>
+          </div>
+        </form>
+      </div>
+    </div>`);
+  const inp = $("#del-confirm"), sub = $("#del-submit");
+  inp.oninput = () => { sub.disabled = inp.value.trim() !== m.roblox_nick; };
+  inp.focus();
+  $("#del-form").onsubmit = async (e) => {
+    e.preventDefault();
+    if (inp.value.trim() !== m.roblox_nick) return;
+    try {
+      await DB.deleteMember(m.id);
+      closeModal();
+      await refresh();
+      toast(`${m.roblox_nick} 님이 삭제되었습니다.`, "ok");
     } catch (err) { toast(err.message, "err"); }
   };
 }
@@ -812,6 +957,7 @@ function openMemberForm(m) {
               <label for="mf-status">상태</label>
               <select id="mf-status" data-testid="select-member-status">
                 <option value="active" ${m.status === "active" ? "selected" : ""}>재직</option>
+                ${m.status === "leave" ? `<option value="leave" selected>휴가 (복귀는 '휴가 복귀' 버튼)</option>` : ""}
                 <option value="transferred" ${m.status === "transferred" ? "selected" : ""}>전출</option>
                 <option value="discharged" ${m.status === "discharged" ? "selected" : ""}>퇴역</option>
               </select>
@@ -838,8 +984,10 @@ function openMemberForm(m) {
         const logs = [];
         if (m.rank !== data.rank) logs.push(`직위 변경: ${m.rank || "없음"} → ${data.rank || "없음"}`);
         if (m.duty !== data.duty) logs.push(`직책 변경: ${m.duty || "없음"} → ${data.duty || "없음"}`);
-        if (status !== m.status) logs.push(status === "transferred" ? "전출 처리" : status === "discharged" ? "퇴역 처리" : "복직");
-        await DB.updateMember(m.id, { ...data, status });
+        if (status !== m.status) logs.push(`상태 변경: ${STATUS_LABEL[m.status]} → ${STATUS_LABEL[status]}`);
+        const patch = { ...data, status };
+        if (status !== "leave") Object.assign(patch, { leave_start: null, leave_end: null, leave_reason: "" });
+        await DB.updateMember(m.id, patch);
         for (const detail of logs) {
           await DB.addChange({
             member_id: m.id,
