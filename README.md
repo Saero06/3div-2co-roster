@@ -30,8 +30,9 @@
 ## 3. 로그인 설정
 
 - **Authentication → Providers → Email** 은 기본으로 켜져 있습니다. (그대로 사용)
-- **Authentication → URL Configuration → Redirect URLs** 에 본인 사이트 주소를 추가하세요.
-  (예: `https://본인계정.github.io/저장소이름/`)
+- **Authentication → URL Configuration → Site URL** 에 본인 사이트 주소를 넣고,
+  **Redirect URLs** 에도 같은 주소를 추가하세요.
+  (예: `https://본인계정.github.io/저장소이름/`) — 이메일 확인 링크가 이 주소로 돌아옵니다.
 - 이메일 확인 메일이 번거롭다면 **Authentication → Providers → Email → Confirm email** 을 끌 수 있지만,
   켜 두는 편이 가짜 가입을 막을 수 있어 더 안전합니다.
 
@@ -91,4 +92,4 @@ update public.profiles set role = 'admin' where email = 'your@email.com';
 | 사이트 코드를 열어 데이터 훔치기 | 데이터는 Supabase DB에 있음 — 코드에 명단 없음 |
 | anon 키 탈취 후 DB 직접 접근 | RLS 정책: 로그인+승인된 사용자만 조회, 관리자만 쓰기 |
 | 마음대로 가입해서 명단 열람 | 가입 즉시 '승인 대기', 관리자 승인 전엔 아무것도 볼 수 없음 |
-| 기록 조작·삭제 은폐 | 모든 실적·경고·인사 변경에 처리자·시각이 기록됨 |
+| 기록 조작 은폐 | 실적·경고 부여·인사 변경 내역에 처리자와 시각이 남아 이력 추적 가능 |

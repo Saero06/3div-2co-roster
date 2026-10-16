@@ -44,6 +44,12 @@ function fmtDate(iso) {
   if (!iso) return "—";
   return String(iso).slice(0, 10);
 }
+/* 타임스탬프(UTC 저장)는 한국시간 날짜로 변환해 표시 */
+function fmtKstDate(iso) {
+  const ms = Date.parse(iso);
+  if (!iso || isNaN(ms)) return "—";
+  return kstDateStr(ms);
+}
 function fmtDateTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -117,7 +123,11 @@ const SupaDB = {
       options: { data: { display_name: displayName } },
     });
     if (error) throw new Error(error.message);
-    return data.session ? "ok" : "confirm"; // 이메일 확인 필요 여부
+    if (data.session) {
+      await this.loadProfile(data.session.user.id); // 이메일 확인이 꺼진 구성: 즉시 로그인됨
+      return "ok";
+    }
+    return "confirm"; // 이메일 확인 필요
   },
   async signOut() {
     await S.sb.auth.signOut();
@@ -143,16 +153,18 @@ const SupaDB = {
     return data;
   },
   async updateMember(id, patch) {
-    const { error } = await S.sb.from("members").update(patch).eq("id", id);
+    const { data, error } = await S.sb.from("members").update(patch).eq("id", id).select("id").single();
     if (error) throw new Error(error.message);
+    if (!data) throw new Error("수정 실패: 대상을 찾을 수 없습니다.");
   },
   async addWarning(w) {
     const { error } = await S.sb.from("warnings").insert(w);
     if (error) throw new Error(error.message);
   },
   async resolveWarning(id) {
-    const { error } = await S.sb.from("warnings").update({ active: false }).eq("id", id);
+    const { data, error } = await S.sb.from("warnings").update({ active: false }).eq("id", id).select("id").single();
     if (error) throw new Error(error.message);
+    if (!data) throw new Error("해제 실패: 대상을 찾을 수 없습니다.");
   },
   async addPoint(e) {
     const { error } = await S.sb.from("point_events").insert(e);
@@ -163,8 +175,9 @@ const SupaDB = {
     if (error) throw new Error(error.message);
   },
   async setUserRole(id, role) {
-    const { error } = await S.sb.from("profiles").update({ role }).eq("id", id);
+    const { data, error } = await S.sb.from("profiles").update({ role }).eq("id", id).select("id").single();
     if (error) throw new Error(error.message);
+    if (!data) throw new Error("권한 변경 실패: 대상을 찾을 수 없습니다.");
   },
 };
 
@@ -402,6 +415,8 @@ const SORTABLE = {
 };
 
 function renderRoster() {
+  const searchWasFocused = document.activeElement?.id === "search";
+  const selStart = document.activeElement?.id === "search" ? document.activeElement.selectionStart : null;
   const ws = weekStartUTC(Date.now());
   const isAdminUser = isAdmin();
 
@@ -473,6 +488,11 @@ function renderRoster() {
     </main>`;
 
   $("#search").oninput = (e) => { S.filter.q = e.target.value; renderRoster(); };
+  if (searchWasFocused) {
+    const el = $("#search");
+    el.focus();
+    if (selStart !== null) el.setSelectionRange(selStart, selStart);
+  }
   $("#status-filter").onchange = (e) => { S.filter.status = e.target.value; renderRoster(); };
   document.querySelectorAll("th[data-sort]").forEach((th) => {
     th.onclick = () => {
@@ -506,7 +526,7 @@ function rosterRow(m, ws) {
       <td><span class="member-name"><span class="avatar">${esc((m.roblox_nick || "?")[0])}</span>${esc(m.roblox_nick)}${m.status !== "active" ? ` <span class="chip none">${m.status === "transferred" ? "전출" : "퇴역"}</span>` : ""}</span></td>
       <td class="mono">${esc(fmtDate(m.join_date))}</td>
       <td class="mono">${sd ?? "—"}일</td>
-      <td class="mono">${lc ? esc(fmtDate(lc.changed_at)) : "—"}</td>
+      <td class="mono">${lc ? esc(fmtKstDate(lc.changed_at)) : "—"}</td>
       <td>${warnChip}</td>
       <td><span class="chip pts ${pts > 0 ? "pos" : pts < 0 ? "neg" : ""}">${pts > 0 ? "+" : ""}${pts}p</span></td>
     </tr>`;
@@ -573,7 +593,7 @@ function drawMemberModal(id) {
             <div class="kv"><div class="k">직위</div><div class="v">${m.rank ? esc(m.rank) : "—"}</div></div>
             <div class="kv"><div class="k">전입일자</div><div class="v mono">${esc(fmtDate(m.join_date))}</div></div>
             <div class="kv"><div class="k">근속일수</div><div class="v mono">${sd ?? "—"}일</div></div>
-            <div class="kv"><div class="k">인사변동일자</div><div class="v mono">${changes[0] ? esc(fmtDate(changes[0].changed_at)) : "—"}</div></div>
+            <div class="kv"><div class="k">인사변동일자</div><div class="v mono">${changes[0] ? esc(fmtKstDate(changes[0].changed_at)) : "—"}</div></div>
             <div class="kv"><div class="k">경고</div><div class="v">${warn ? `<span class="chip warn-${warn}">경고 ${warn}</span>` : `<span class="chip none">없음</span>`}</div></div>
           </div>
         </div>
@@ -587,12 +607,12 @@ function drawMemberModal(id) {
           <div class="timeline">
             ${weekEvents.map((p) => `
               <div class="timeline-item">
-                <span class="when">${esc(fmtDate(p.event_at))}</span>
+                <span class="when">${esc(fmtKstDate(p.event_at))}</span>
                 <span class="delta ${p.amount >= 0 ? "pos" : "neg"}">${p.amount >= 0 ? "+" : ""}${p.amount}p</span>
                 <span>${esc(p.reason || "—")}</span>
               </div>`).join("")}
           </div>
-          <p style="margin-top:12px;font-size:var(--text-sm);color:var(--text-muted);">이번 주 합계: <strong class="mono ${weekSum >= 0 ? "pos" : "neg"}" style="color:${weekSum >= 0 ? "var(--success)" : "var(--danger)"}">${weekSum >= 0 ? "+" : ""}${weekSum}p</strong></p>
+          <p style="margin-top:12px;font-size:var(--text-sm);color:var(--text-muted);">${modalWeekOffset === 0 ? "이번 주" : "선택한 주"} 합계: <strong class="mono ${weekSum >= 0 ? "pos" : "neg"}" style="color:${weekSum >= 0 ? "var(--success)" : "var(--danger)"}">${weekSum >= 0 ? "+" : ""}${weekSum}p</strong></p>
           ` : `<p class="empty-state" style="padding:24px;">해당 주 실적 기록이 없습니다.</p>`}
         </div>
 
@@ -602,7 +622,7 @@ function drawMemberModal(id) {
           <div class="timeline">
             ${warns.map((w) => `
               <div class="timeline-item">
-                <span class="when">${esc(fmtDate(w.given_at))}</span>
+                <span class="when">${esc(fmtKstDate(w.given_at))}</span>
                 <span><span class="chip ${w.active ? "warn-" + w.stage : "none"}">경고 ${w.stage}${w.active ? "" : " (해제)"}</span> ${esc(w.reason || "—")}</span>
                 ${admin && w.active ? `<button class="btn ghost sm" data-resolve="${w.id}" data-testid="button-resolve-warning">해제</button>` : ""}
               </div>`).join("")}
@@ -615,7 +635,7 @@ function drawMemberModal(id) {
           <div class="timeline">
             ${changes.map((c) => `
               <div class="timeline-item">
-                <span class="when">${esc(fmtDate(c.changed_at))}</span>
+                <span class="when">${esc(fmtKstDate(c.changed_at))}</span>
                 <span><strong>${esc(c.change_type)}</strong> · ${esc(c.detail || "—")}</span>
               </div>`).join("")}
           </div>` : `<p class="empty-state" style="padding:24px;">인사 이력이 없습니다.</p>`}
@@ -841,7 +861,7 @@ function renderAdmin() {
           <div class="pending-row" data-testid="row-pending-${esc(p.email)}">
             <div class="info">
               <div class="mail">${esc(p.display_name || p.email)}</div>
-              <div class="date">${esc(p.email)} · 신청 ${esc(fmtDate(p.created_at))}</div>
+              <div class="date">${esc(p.email)} · 신청 ${esc(fmtKstDate(p.created_at))}</div>
             </div>
             <button class="btn sm" data-approve="${p.id}" data-testid="button-approve">승인</button>
             <button class="btn sm ghost" data-reject="${p.id}" data-testid="button-reject">거절</button>
@@ -861,14 +881,14 @@ function renderAdmin() {
                     <td style="cursor:default;">${esc(p.display_name || "—")}</td>
                     <td class="mono">${esc(p.email)}</td>
                     <td>${p.role === "admin" ? `<span class="chip duty">관리자</span>` : p.role === "member" ? `<span class="chip rank">인원</span>` : p.role === "pending" ? `<span class="chip warn-1">대기</span>` : `<span class="chip none">차단</span>`}</td>
-                    <td class="mono">${esc(fmtDate(p.created_at))}</td>
+                    <td class="mono">${esc(fmtKstDate(p.created_at))}</td>
                     <td style="cursor:default;">${p.id !== S.profile.id && (p.role === "member" || p.role === "admin") ? `<button class="btn sm ghost" data-toggle="${p.id}" data-next="${p.role === "admin" ? "member" : "admin"}" data-testid="button-toggle-role">${p.role === "admin" ? "인원으로 강등" : "관리자로 승격"}</button>` : "—"}</td>
                   </tr>`).join("")}
               </tbody>
             </table>
           </div>
         </div>
-        <p style="margin-top:12px;font-size:var(--text-xs);color:var(--text-faint);">관리자 ${admins.length}명 · 모든 변경은 데이터베이스에 기록됩니다.</p>
+        <p style="margin-top:12px;font-size:var(--text-xs);color:var(--text-faint);">관리자 ${admins.length}명 · 실적·경고·인사 변경은 처리자 정보와 함께 기록됩니다.</p>
       </div>
     </main>`;
 

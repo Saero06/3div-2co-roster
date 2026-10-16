@@ -127,6 +127,12 @@ create policy "profiles admin read"
   on public.profiles for select
   using (public.is_admin());
 
+-- 관리자만 계정 권한 변경 (승인/거절/관리자 승격)
+create policy "profiles admin update"
+  on public.profiles for update
+  using (public.is_admin())
+  with check (public.is_admin());
+
 -- members: 승인된 인원(member/admin)만 조회, 관리자만 수정
 create policy "members viewer read"
   on public.members for select
